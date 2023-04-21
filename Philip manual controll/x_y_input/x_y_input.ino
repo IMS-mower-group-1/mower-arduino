@@ -57,8 +57,8 @@ void loop() {
     float rightSpeed = magnitude * (cos(angle) - sin(angle));
 
     // Scale motor speeds to the desired PWM range (e.g., -255 to 255)
-    leftMotorSpeed = -leftSpeed * 255;
-    rightMotorSpeed = rightSpeed * 255;
+    leftMotorSpeed = leftSpeed * 255;
+    rightMotorSpeed = -rightSpeed * 255;
     Serial.print("\nLeft motor speed:");
     Serial.print(leftMotorSpeed);
     Serial.print("\nRight motor speed:");
