@@ -10,18 +10,16 @@ MeEncoderOnBoard Encoder_1(SLOT1);
 MeEncoderOnBoard Encoder_2(SLOT2);
 MeUltrasonicSensor ultrasonic_10(10);
 MeLineFollower linefollower_9(9);
-MeLightSensor lightsensor_12(12);
 
 float accumulatedX = 0.0;
 float accumulatedY = 0.0;
 const float wheel_radius = 0.045;
 
+// The time needed without input from the pi4 to stop the mower from moving.
 unsigned long lastInputTime;
-const unsigned long inputTimeout = 500; //input timeout
+const unsigned long inputTimeout = 500;
 
 static unsigned long last_print = 0;
-
-String state = "AUTO";
 
 enum AutonomousState {
   MOVE_FORWARD,
@@ -29,6 +27,13 @@ enum AutonomousState {
   BACK_OFF_AND_TURN
 };
 
+enum MowerState {
+  MANUAL,
+  AUTO,
+  OFF
+};
+
+MowerState mowerState = AUTO;
 AutonomousState autonomousState = MOVE_FORWARD;
 unsigned long autonomousStateStartTime = 0;
 int savedLineFollowerStatus = -1;
@@ -47,6 +52,71 @@ void isr_process_encoder2(void)
     Encoder_2.pulsePosMinus();
   }else{
     Encoder_2.pulsePosPlus();
+  }
+}
+
+void setup() {
+  Serial.begin(9600);
+  gyro_0.begin();
+  rgbled_0.setpin(44);
+  rgbled_0.setColor(0, 0, 0, 0);
+  rgbled_0.show();
+  TCCR1A = _BV(WGM10);
+  TCCR1B = _BV(CS11) | _BV(WGM12);
+  TCCR2A = _BV(WGM21) | _BV(WGM20);
+  TCCR2B = _BV(CS21);
+  attachInterrupt(Encoder_1.getIntNum(), isr_process_encoder1, RISING);
+  attachInterrupt(Encoder_2.getIntNum(), isr_process_encoder2, RISING);
+  lastInputTime = millis();
+  while(1){
+    if (Serial.available()) {
+      lastInputTime = millis();
+      String input = Serial.readStringUntil('\n');
+      input.trim(); // Remove any leading/trailing whitespace
+
+      handleCommand(input);
+      // Clear the serial buffer to ensure we're always reading the latest data
+      clearSerialBuffer();
+    }
+    switch(mowerState){
+      case AUTO:
+        handleAutonomousBehaviour();
+        update_position();
+        send_position();
+        break;
+      case MANUAL:
+        if (millis() - lastInputTime > inputTimeout) {
+          Encoder_1.setTarPWM(0);
+          Encoder_2.setTarPWM(0);
+        }
+        gyro_0.update();
+        Encoder_1.loop();
+        Encoder_2.loop();
+        update_position();
+        send_position();
+        break;
+      case OFF:
+        turnOff();
+        break;
+    }
+  }
+}
+
+void clearSerialBuffer() {
+  while (Serial.available() > 0) {
+    Serial.read();
+  }
+}
+
+void handleCommand(const String &input) {
+  if (input == "MANUAL") {
+    mowerState = MANUAL;
+  } else if (input == "AUTO") {
+    mowerState = AUTO;
+  } else if (input == "OFF") {
+    mowerState = OFF;
+  } else {
+    handleManualBehaviour(input);
   }
 }
 
@@ -70,42 +140,13 @@ void update_position() {
   accumulatedY += yDistance;
 }
 
-void setup() {
-  Serial.begin(9600);
-  gyro_0.begin();
-  rgbled_0.setpin(44);
-  rgbled_0.fillPixelsBak(0, 2, 1);
-  TCCR1A = _BV(WGM10);
-  TCCR1B = _BV(CS11) | _BV(WGM12);
-  TCCR2A = _BV(WGM21) | _BV(WGM20);
-  TCCR2B = _BV(CS21);
-  attachInterrupt(Encoder_1.getIntNum(), isr_process_encoder1, RISING);
-  attachInterrupt(Encoder_2.getIntNum(), isr_process_encoder2, RISING);
-  randomSeed((unsigned long)(lightsensor_12.read() * 123456));
-  lastInputTime = millis();
-  while(1){
-    if(state == "AUTO"){
-      handleAutonomousBehaviour();
-    } else if (state == "MANUAL"){
-      handleManualBehaviour();
-    } else {
-      // TODO: turn off
-    }
-    
-    update_position();
-    if (millis() - last_print > 500) { // Print every 500 ms
-      Serial.print("X: ");
-      Serial.print(accumulatedX/100);
-      Serial.print(", Y: ");
-      Serial.println(accumulatedY/100);
-      last_print = millis();
-    }
-  }
-}
-
-void clearSerialBuffer() {
-  while (Serial.available() > 0) {
-    Serial.read();
+void send_position(){
+  if (millis() - last_print > 1000) { // Sends 1/second
+    Serial.print("X: ");
+    Serial.print(accumulatedX/100);
+    Serial.print(", Y: ");
+    Serial.println(accumulatedY/100);
+    last_print = millis();
   }
 }
 
@@ -118,32 +159,24 @@ void set_wheel_speeds(float angle, int speed) {
   Encoder_1.setTarPWM(-(int)(vy - vx));
   Encoder_2.setTarPWM((int)(vy + vx));
 }
-void handleManualBehaviour(){
-  if (Serial.available()) {
-    lastInputTime = millis();
 
-    // Read angle and magnitude
-    float angle = Serial.parseFloat();
-    float magnitude = Serial.parseFloat();
+void handleManualBehaviour(const String &input){
+  // Find the position of the comma
+  int commaIndex = input.indexOf(',');
 
-    // Clear the serial buffer to ensure we're always reading the latest data
-    clearSerialBuffer();
+  // Extract the angle and magnitude as substrings
+  String angleStr = input.substring(0, commaIndex);
+  String magnitudeStr = input.substring(commaIndex + 1);
 
-    // Normalize the magnitude within the range of 0 to 255
-    int speed = (int)(magnitude * 255);
+  // Convert the substrings to float values
+  float angle = angleStr.toFloat();
+  float magnitude = magnitudeStr.toFloat();
 
-    // Calculate and set wheel speeds based on the given angle and speed
-    set_wheel_speeds(angle, speed);
-  }
+  // Normalize the magnitude within the range of 0 to 255
+  int speed = (int)(magnitude * 255);
 
-  if (millis() - lastInputTime > inputTimeout) {
-    Encoder_1.setTarPWM(0);
-    Encoder_2.setTarPWM(0);
-  }
-
-  gyro_0.update();
-  Encoder_1.loop();
-  Encoder_2.loop();
+  // Calculate and set wheel speeds based on the given angle and speed
+  set_wheel_speeds(angle, speed);
 }
 
 void handleAutonomousBehaviour() {
@@ -194,6 +227,20 @@ void handleAutonomousBehaviour() {
       }
       break;
   }
+
+  gyro_0.update();
+  Encoder_1.loop();
+  Encoder_2.loop();
+}
+
+void turnOff() {
+  // Stop the motors
+  Encoder_1.setTarPWM(0);
+  Encoder_2.setTarPWM(0);
+
+  // Turn off the lights
+  rgbled_0.setColor(0, 0, 0, 0);
+  rgbled_0.show();
 
   gyro_0.update();
   Encoder_1.loop();
