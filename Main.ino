@@ -34,7 +34,7 @@ enum MowerState {
   OFF
 };
 
-MowerState mowerState = AUTO;
+MowerState mowerState = MANUAL;
 AutonomousState autonomousState = MOVE_FORWARD;
 unsigned long autonomousStateStartTime = 0;
 int savedLineFollowerStatus = -1;
@@ -154,7 +154,7 @@ void send_position(){
 }
 
 void set_wheel_speeds(float angle, int speed) {
-  float rad_angle = angle + 3.14159; //Flip angle
+  float rad_angle = 3.14159-angle; //Flip angle
   float vx = speed * sin(rad_angle);
   float vy = speed * cos(rad_angle);
 
@@ -212,9 +212,9 @@ void handleAutonomousBehaviour() {
         set_wheel_speeds(0.0, speed);
       } else if (elapsedTime < 1700) {
         if (savedLineFollowerStatus == 1) {
-          set_wheel_speeds(-1.57, speed);
-        } else if (savedLineFollowerStatus == 2) {
           set_wheel_speeds(1.57, speed);
+        } else if (savedLineFollowerStatus == 2) {
+          set_wheel_speeds(-1.57, speed);
         } else {
           set_wheel_speeds(savedRandomDirection, speed);
         }
