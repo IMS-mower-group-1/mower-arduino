@@ -112,11 +112,11 @@ void clearSerialBuffer() {
 }
 
 void handleCommand(const String &input) {
-  if (input == "MANUAL") {
+  if (input == "MANUAL" || input == "TAKE_CONTROL") {
     mowerState = MANUAL;
-  } else if (input == "AUTO") {
+  } else if (input == "AUTO" || input == "START_SESSION") {
     mowerState = AUTO;
-  } else if (input == "OFF") {
+  } else if (input == "OFF" ||input == "END_SESSION" ) {
     mowerState = OFF;
   } else {
     handleManualBehaviour(input);
