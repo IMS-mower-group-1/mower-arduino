@@ -6,6 +6,7 @@
 
 MeGyro gyro_0(0, 0x69);
 MeRGBLed rgbled_0(0, 12);
+MeBuzzer buzzer;
 MeEncoderOnBoard Encoder_1(SLOT1);
 MeEncoderOnBoard Encoder_2(SLOT2);
 MeUltrasonicSensor ultrasonic_10(10);
@@ -59,6 +60,7 @@ void isr_process_encoder2(void)
 void setup() {
   Serial.begin(9600);
   gyro_0.begin();
+  buzzer.setpin(45);
   rgbled_0.setpin(44);
   rgbled_0.setColor(0, 0, 0, 0);
   rgbled_0.show();
@@ -196,6 +198,7 @@ void handleAutonomousBehaviour() {
         savedLineFollowerStatus = lineStatus;
         savedRandomDirection = (random(0, 2) == 0 ? -1.57 : 1.57);
       } else if (distance < 10) {
+        Serial.println("TAKE_PICTURE");
         autonomousState = BACK_OFF_AND_TURN;
         autonomousStateStartTime = currentTime;
         savedRandomDirection = (random(0, 2) == 0 ? -1.57 : 1.57);
@@ -225,6 +228,7 @@ void handleAutonomousBehaviour() {
         rgbled_0.setColor(0, 130, 0, 0);
         rgbled_0.show();
         set_wheel_speeds(0.0, speed);
+        collisionBuzz();
       } else if (elapsedTime < 2000) {
         set_wheel_speeds(savedRandomDirection, speed);
       } else {
@@ -254,6 +258,23 @@ void turnOff() {
   Encoder_2.loop();
 }
 
+void collisionBuzz() {
+  static unsigned long lastToneTime = 0;
+  static int toneCount = 0;
+  unsigned long currentTime = millis();
+
+  if (toneCount < 2 && currentTime - lastToneTime >= 100) {
+    if (toneCount % 2 == 0) {
+      buzzer.tone(200, 50);
+    } else {
+      buzzer.tone(150, 100);
+    }
+    lastToneTime = currentTime;
+    toneCount++;
+  } else if (toneCount >= 2) {
+    toneCount = 0;
+  }
+}
 
 
 void _loop(){
