@@ -37,6 +37,7 @@ MowerState mowerState = AUTO;
 AutonomousState autonomousState = MOVE_FORWARD;
 unsigned long autonomousStateStartTime = 0;
 int savedLineFollowerStatus = -1;
+float savedRandomDirection;
 
 void isr_process_encoder1(void)
 {
@@ -193,9 +194,11 @@ void handleAutonomousBehaviour() {
         autonomousState = TURN_AWAY_FROM_LINE;
         autonomousStateStartTime = currentTime;
         savedLineFollowerStatus = lineStatus;
+        savedRandomDirection = (random(0, 2) == 0 ? -1.57 : 1.57);
       } else if (distance < 10) {
         autonomousState = BACK_OFF_AND_TURN;
         autonomousStateStartTime = currentTime;
+        savedRandomDirection = (random(0, 2) == 0 ? -1.57 : 1.57);
       } else {
         set_wheel_speeds(3.14, random(130, 170));
       }
@@ -210,7 +213,7 @@ void handleAutonomousBehaviour() {
         } else if (savedLineFollowerStatus == 2) {
           set_wheel_speeds(1.57, speed);
         } else {
-          set_wheel_speeds(random(0, 2) == 0 ? -1.57 : 1.57, speed);
+          set_wheel_speeds(savedRandomDirection, speed);
         }
       } else {
         autonomousState = MOVE_FORWARD;
@@ -219,10 +222,14 @@ void handleAutonomousBehaviour() {
 
     case BACK_OFF_AND_TURN:
       if (elapsedTime < 1000) {
+        rgbled_0.setColor(0, 130, 0, 0);
+        rgbled_0.show();
         set_wheel_speeds(0.0, speed);
       } else if (elapsedTime < 2000) {
-        set_wheel_speeds(random(0, 2) == 0 ? -1.57 : 1.57, speed);
+        set_wheel_speeds(savedRandomDirection, speed);
       } else {
+        rgbled_0.setColor(0, 0, 0, 0);
+        rgbled_0.show();
         autonomousState = MOVE_FORWARD;
       }
       break;
