@@ -34,7 +34,7 @@ enum MowerState {
   OFF
 };
 
-MowerState mowerState = MANUAL;
+MowerState mowerState = OFF;
 AutonomousState autonomousState = MOVE_FORWARD;
 unsigned long autonomousStateStartTime = 0;
 int savedLineFollowerStatus = -1;
@@ -62,8 +62,6 @@ void setup() {
   gyro_0.begin();
   buzzer.setpin(45);
   rgbled_0.setpin(44);
-  rgbled_0.setColor(0, 0, 0, 0);
-  rgbled_0.show();
   TCCR1A = _BV(WGM10);
   TCCR1B = _BV(CS11) | _BV(WGM12);
   TCCR2A = _BV(WGM21) | _BV(WGM20);
@@ -71,11 +69,13 @@ void setup() {
   attachInterrupt(Encoder_1.getIntNum(), isr_process_encoder1, RISING);
   attachInterrupt(Encoder_2.getIntNum(), isr_process_encoder2, RISING);
   lastInputTime = millis();
+  rgbled_0.setColor(0, 10, 10, 10);
+  rgbled_0.show();
   while(1){
     if (Serial.available()) {
       lastInputTime = millis();
       String input = Serial.readStringUntil('\n');
-      input.trim(); // Remove any leading/trailing whitespace
+      input.trim(); // Removes any leading/trailing whitespace
 
       handleCommand(input);
       // Clear the serial buffer to ensure we're always reading the latest data
@@ -114,10 +114,13 @@ void clearSerialBuffer() {
 void handleCommand(const String &input) {
   if (input == "MANUAL" || input == "TAKE_CONTROL") {
     mowerState = MANUAL;
+    updateLEDColor();
   } else if (input == "AUTO" || input == "START_SESSION") {
     mowerState = AUTO;
+    updateLEDColor();
   } else if (input == "OFF" ||input == "END_SESSION" ) {
     mowerState = OFF;
+    updateLEDColor();
   } else {
     handleManualBehaviour(input);
   }
@@ -130,11 +133,15 @@ void update_position() {
     x_angle = 360 + x_angle;
   }
   x_angle = (x_angle * M_PI / 180);
-
-  float rpm = (Encoder_1.getCurrentSpeed() - Encoder_2.getCurrentSpeed()) / 2.0;
+  float rpm; 
+  if(mowerState == MANUAL){
+    rpm = (Encoder_1.getCurrentSpeed() - Encoder_2.getCurrentSpeed()) / 4.0;
+  } else {
+    rpm = (Encoder_1.getCurrentSpeed() - Encoder_2.getCurrentSpeed());
+  }
   float angular_velocity = rpm * 2 * M_PI / 60;
   float velocity = angular_velocity * wheel_radius * 100 * (-1);
-  float distance = velocity * 0.1; // Assuming 100 ms update interval
+  float distance = velocity * 0.1;
 
   float xDistance = distance * cos(x_angle);
   float yDistance = distance * sin(x_angle);
@@ -144,11 +151,11 @@ void update_position() {
 }
 
 void send_position(){
-  if (millis() - last_print > 1000) { // Sends 1/second
+  if (millis() - last_print > 2000) { // Sends every 2 seconds
     Serial.print("X: ");
-    Serial.print(accumulatedX/100);
+    Serial.print(accumulatedX/500);
     Serial.print(", Y: ");
-    Serial.println(accumulatedY/100);
+    Serial.println(accumulatedY/500);
     last_print = millis();
   }
 }
@@ -185,7 +192,7 @@ void handleManualBehaviour(const String &input){
 void handleAutonomousBehaviour() {
   int lineStatus = linefollower_9.readSensors();
   int distance = ultrasonic_10.distanceCm();
-  int speed = random(120, 131);
+  int speed = random(130, 146);
 
   unsigned long currentTime = millis();
   unsigned long elapsedTime = currentTime - autonomousStateStartTime;
@@ -224,16 +231,17 @@ void handleAutonomousBehaviour() {
       break;
 
     case BACK_OFF_AND_TURN:
-      if (elapsedTime < 1000) {
+      if (elapsedTime < 1200) {
         rgbled_0.setColor(0, 130, 0, 0);
         rgbled_0.show();
-        set_wheel_speeds(0.0, speed);
+        set_wheel_speeds(0.0, 170);
         collisionBuzz();
-      } else if (elapsedTime < 2000) {
+      } else if( elapsedTime < 3500){
+        set_wheel_speeds(0.0, 0.0);
+      } else if (elapsedTime < 4500) {
+        updateLEDColor();
         set_wheel_speeds(savedRandomDirection, speed);
       } else {
-        rgbled_0.setColor(0, 0, 0, 0);
-        rgbled_0.show();
         autonomousState = MOVE_FORWARD;
       }
       break;
@@ -248,10 +256,6 @@ void turnOff() {
   // Stop the motors
   Encoder_1.setTarPWM(0);
   Encoder_2.setTarPWM(0);
-
-  // Turn off the lights
-  rgbled_0.setColor(0, 0, 0, 0);
-  rgbled_0.show();
 
   gyro_0.update();
   Encoder_1.loop();
@@ -274,6 +278,21 @@ void collisionBuzz() {
   } else if (toneCount >= 2) {
     toneCount = 0;
   }
+}
+
+void updateLEDColor() {
+  switch (mowerState) {
+    case AUTO:
+      rgbled_0.setColor(0, 0, 0, 130); // Blue
+      break;
+    case MANUAL:
+      rgbled_0.setColor(0, 0, 130, 0); // Green
+      break;
+    case OFF:
+      rgbled_0.setColor(0, 0, 0, 0); // Off
+      break;
+  }
+  rgbled_0.show();
 }
 
 
