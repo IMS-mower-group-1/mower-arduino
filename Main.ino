@@ -253,6 +253,9 @@ void handleAutonomousBehaviour() {
 }
 
 void turnOff() {
+  // Reset mower position
+  accumulatedX = 0.0;
+  accumulatedY = 0.0;
   // Stop the motors
   Encoder_1.setTarPWM(0);
   Encoder_2.setTarPWM(0);
